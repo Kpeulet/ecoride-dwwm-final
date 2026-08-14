@@ -1,0 +1,101 @@
+/* css/style.css */
+
+/* ==========================================================================
+   CHARTE GRAPHIQUE ECORIDE - STYLES GLOBAUX
+   ========================================================================== */
+
+/* 1. Déclaration des variables de la Charte Graphique */
+:root {
+  /* Palette de couleurs */
+  --color-sapin: #1F8653;     /* Vert Sapin (CTA & Accents) */
+  --color-eco: #28A74A;       /* Vert Éco (Bannière & Badges) */
+  --color-slate: #2C3E50;     /* Gris Ardoise (Texte courant & Footer) */
+  --color-bg-light: #F4F7F6;  /* Gris très clair (Fond d'interface) */
+
+  /* Polices de caractères */
+  --font-title: 'Montserrat', sans-serif;
+  --font-body: 'Open Sans', sans-serif;
+}
+
+/* 2. Styles de base (Typographie & Fond) */
+body { 
+  font-family: var(--font-body);
+  background-color: var(--color-bg-light);
+  color: var(--color-slate);
+}
+
+/* Polices sur l'ensemble des titres */
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: var(--font-title);
+  font-weight: 700;
+  color: var(--color-slate);
+}
+
+/* 3. Surcharges & Couleurs de la Charte */
+
+/* Vert Sapin (Navbar, Boutons principaux, Accents) */
+.bg-custom-sapin {
+  background-color: var(--color-sapin) !important;
+}
+
+.btn-success,
+.btn-success-custom {
+  background-color: var(--color-sapin) !important;
+  border-color: var(--color-sapin) !important;
+  color: #ffffff !important;
+}
+
+.btn-success:hover,
+.btn-success-custom:hover {
+  background-color: #176840 !important;
+  border-color: #176840 !important;
+}
+
+/* Vert Éco (Bannière) */
+.bg-custom-eco {
+  background-color: var(--color-eco) !important;
+}
+
+/* Gris Ardoise (Surcharge Bootstrap .bg-dark, .text-dark & Footer) */
+.bg-dark, footer {
+  background-color: var(--color-slate) !important;
+}
+
+.text-dark {
+  color: var(--color-slate) !important;
+}
+
+/* 4. Style sur-mesure pour la Navbar */
+.custom-navbar .nav-link {
+  transition: color 0.2s ease-in-out;
+}
+
+.custom-navbar .nav-link:hover {
+  color: #ccffcc !important;
+}
+
+.custom-navbar .nav-link.active-link {
+  color: #ccffcc !important;
+  font-weight: bold;         
+  text-decoration: underline; 
+  text-decoration-color: #ccffcc; 
+  text-decoration-thickness: 2px; 
+  text-underline-offset: 5px; 
+}
+
+/* 5. Vos composants d'interface */
+.card-custom { 
+  border: none; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05); 
+  border-radius: 10px; 
+}
+
+.title-line { 
+  border-bottom: 3px solid var(--color-sapin); 
+  padding-bottom: 10px; 
+}
+
+.badge-source { 
+  font-size: 0.85rem; 
+  border-radius: 20px; 
+}

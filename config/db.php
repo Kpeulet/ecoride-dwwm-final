@@ -2,7 +2,7 @@
 $host = 'mysql-ecoride-djedjed.alwaysdata.net';
 $dbname = 'ecoride-djedjed_ecoride_db';
 $username = 'ecoride-djedjed';
-$password = 'VOTRE_MOT_DE_PASSE_ALWAYSDATA'; // Indiquez votre vrai mot de passe AlwaysData ici
+$password = '!1718Ab@19621973#';
 
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);

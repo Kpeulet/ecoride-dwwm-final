@@ -38,7 +38,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['role']    = $user['role']; // 'admin', 'employe' ou 'utilisateur'
 
             // AIGUILLAGE SELON LE RÔLE
-            var_dump($_SESSION['role']);
             switch ($_SESSION['role']) {
                 case 'admin':
                     header('Location: ../espace_admin.php');

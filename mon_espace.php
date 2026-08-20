@@ -165,7 +165,6 @@ $mes_reservations = $stmtReservations->fetchAll();
                     <div class="fs-2 text-sapin"><i class="bi bi-person-circle"></i></div>
                     <div>
                         <h3 class="h5 fw-bold text-dark mb-0">Bonjour, <?= htmlspecialchars($user['pseudo']) ?></h3>
-                        <?php var_dump($_SESSION, $user); ?>
                         <div class="small mt-1">
                             <strong>Statut : </strong> 
                             <?php 
@@ -173,7 +172,7 @@ $mes_reservations = $stmtReservations->fetchAll();
 
                                 if ($role === 'employe'): ?>
                                     <span class="badge bg-info-subtle text-info-emphasis border border-info px-2 py-1 rounded-pill">
-                                        <i class="bi bi-shield-lock-fill me-1"></i> Employé EcoRide
+                                        <i class="bi bi-shield-lock-fill me-1"></i> Employé
                                     </span>
                                 <?php elseif ($role === 'administrateur'): ?>
                                     <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1 rounded-pill">

@@ -165,11 +165,29 @@ $mes_reservations = $stmtReservations->fetchAll();
                     <div class="fs-2 text-sapin"><i class="bi bi-person-circle"></i></div>
                     <div>
                         <h3 class="h5 fw-bold text-dark mb-0">Bonjour, <?= htmlspecialchars($user['pseudo']) ?></h3>
+                        <?php var_dump($_SESSION, $user); ?>
                         <div class="small mt-1">
                             <strong>Statut : </strong> 
-                            <?= $user['est_chauffeur'] 
-                                ? '<span class="badge bg-success-subtle text-success border border-success px-2 py-1 rounded-pill"><i class="bi bi-car-front-fill me-1"></i> Passager & Chauffeur</span>' 
-                                : '<span class="badge bg-secondary-subtle text-secondary border px-2 py-1 rounded-pill"><i class="bi bi-person-walking me-1"></i> Passager uniquement</span>' ?>
+                            <?php 
+                                $role = $_SESSION['role'] ?? $user['role'] ?? 'utilisateur';
+
+                                if ($role === 'employe'): ?>
+                                    <span class="badge bg-info-subtle text-info-emphasis border border-info px-2 py-1 rounded-pill">
+                                        <i class="bi bi-shield-lock-fill me-1"></i> Employé EcoRide
+                                    </span>
+                                <?php elseif ($role === 'administrateur'): ?>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1 rounded-pill">
+                                        <i class="bi bi-shield-fill-check me-1"></i> Administrateur
+                                    </span>
+                                <?php elseif (!empty($user['est_chauffeur'])): ?>
+                                    <span class="badge bg-success-subtle text-success border border-success px-2 py-1 rounded-pill">
+                                        <i class="bi bi-car-front-fill me-1"></i> Passager & Chauffeur
+                                    </span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 rounded-pill">
+                                        <i class="bi bi-person-walking me-1"></i> Passager uniquement
+                                    </span>
+                                <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -235,7 +253,10 @@ $mes_reservations = $stmtReservations->fetchAll();
         </div>
 
         <!-- Section Trajets Proposés (Chauffeur) -->
-        <?php if ($user['est_chauffeur']): ?>
+        <?php 
+        $role = $_SESSION['role'] ?? $user['role'] ?? 'utilisateur';
+        if (!empty($user['est_chauffeur']) || in_array($role, ['employe', 'administrateur'])): 
+        ?>
             <h2 class="h4 fw-bold text-dark mt-4 mb-3"><i class="bi bi-calendar-event text-sapin me-2"></i>Mes Trajets proposés (Chauffeur)</h2>
             <?php if (empty($mes_trajets_proposes)): ?>
                 <div class="card space-card p-4 bg-white text-muted mb-4 fst-italic">

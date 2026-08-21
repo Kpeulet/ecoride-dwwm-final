@@ -24,34 +24,44 @@ $stmtUser = $pdo->prepare("SELECT * FROM utilisateur WHERE id = ?");
 $stmtUser->execute([$user_id]);
 $user = $stmtUser->fetch();
 
-// 2. Récupération des véhicules de l'utilisateur
-$stmtVehicules = $pdo->prepare("SELECT * FROM vehicule WHERE id_utilisateur = ?");
-$stmtVehicules->execute([$user_id]);
-$vehicules = $stmtVehicules->fetchAll();
+$role = $_SESSION['role'] ?? $user['role'] ?? 'utilisateur';
+$estAdminOuEmploye = in_array($role, ['employe', 'administrateur', 'admin']);
 
-// 3. Récupération des trajets que l'utilisateur PROPOSE en tant que CHAUFFEUR
-$stmtTrajetsChauffeur = $pdo->prepare("
-    SELECT t.*, v.modele, v.immatriculation, v.energie 
-    FROM trajets t
-    LEFT JOIN vehicule v ON t.id_vehicule = v.id
-    WHERE t.id_chauffeur = ?
-    ORDER BY t.date_depart DESC
-");
-$stmtTrajetsChauffeur->execute([$user_id]);
-$mes_trajets_proposes = $stmtTrajetsChauffeur->fetchAll();
+// Données réservées aux utilisateurs standards
+$vehicules = [];
+$mes_trajets_proposes = [];
+$mes_reservations = [];
 
-// 4. Récupération des réservations de l'utilisateur en tant que PASSAGER
-$stmtReservations = $pdo->prepare("
-    SELECT r.id AS id_reservation, r.id_trajet, t.ville_depart, t.ville_arrivee, t.date_depart, t.prix, t.statut AS statut_trajet,
-           a.id AS avis_id
-    FROM reservations r
-    JOIN trajets t ON r.id_trajet = t.id
-    LEFT JOIN avis a ON a.id_trajet = t.id AND a.id_expediteur = r.id_utilisateur
-    WHERE r.id_utilisateur = ?
-    ORDER BY t.date_depart DESC
-");
-$stmtReservations->execute([$user_id]);
-$mes_reservations = $stmtReservations->fetchAll();
+if (!$estAdminOuEmploye) {
+    // 2. Récupération des véhicules
+    $stmtVehicules = $pdo->prepare("SELECT * FROM vehicule WHERE id_utilisateur = ?");
+    $stmtVehicules->execute([$user_id]);
+    $vehicules = $stmtVehicules->fetchAll();
+
+    // 3. Récupération des trajets que l'utilisateur PROPOSE
+    $stmtTrajetsChauffeur = $pdo->prepare("
+        SELECT t.*, v.modele, v.immatriculation, v.energie 
+        FROM trajets t
+        LEFT JOIN vehicule v ON t.id_vehicule = v.id
+        WHERE t.id_chauffeur = ?
+        ORDER BY t.date_depart DESC
+    ");
+    $stmtTrajetsChauffeur->execute([$user_id]);
+    $mes_trajets_proposes = $stmtTrajetsChauffeur->fetchAll();
+
+    // 4. Récupération des réservations
+    $stmtReservations = $pdo->prepare("
+        SELECT r.id AS id_reservation, r.id_trajet, t.ville_depart, t.ville_arrivee, t.date_depart, t.prix, t.statut AS statut_trajet,
+               a.id AS avis_id
+        FROM reservations r
+        JOIN trajets t ON r.id_trajet = t.id
+        LEFT JOIN avis a ON a.id_trajet = t.id AND a.id_expediteur = r.id_utilisateur
+        WHERE r.id_utilisateur = ?
+        ORDER BY t.date_depart DESC
+    ");
+    $stmtReservations->execute([$user_id]);
+    $mes_reservations = $stmtReservations->fetchAll();
+}
 ?>
 
 <!DOCTYPE html>
@@ -150,12 +160,14 @@ $mes_reservations = $stmtReservations->fetchAll();
                 <h1 class="fw-bold h2 text-dark m-0">Mon Espace Personnel</h1>
                 <p class="text-muted small mb-0">Bienvenue sur votre tableau de bord EcoRide.</p>
             </div>
-            <div class="align-self-start align-self-md-auto">
-                <div class="credit-badge shadow-sm d-inline-flex align-items-center gap-2 fs-5">
-                    <i class="bi bi-wallet2"></i>
-                    <span><?= htmlspecialchars($user['credits']) ?> crédits</span>
+            <?php if (!$estAdminOuEmploye): ?>
+                <div class="align-self-start align-self-md-auto">
+                    <div class="credit-badge shadow-sm d-inline-flex align-items-center gap-2 fs-5">
+                        <i class="bi bi-wallet2"></i>
+                        <span><?= htmlspecialchars($user['credits'] ?? 0) ?> crédits</span>
+                    </div>
                 </div>
-            </div>
+            <?php endif; ?>
         </div>
 
         <!-- Profil & Infos -->
@@ -167,26 +179,23 @@ $mes_reservations = $stmtReservations->fetchAll();
                         <h3 class="h5 fw-bold text-dark mb-0">Bonjour, <?= htmlspecialchars($user['pseudo']) ?></h3>
                         <div class="small mt-1">
                             <strong>Statut : </strong> 
-                            <?php 
-                                $role = $_SESSION['role'] ?? $user['role'] ?? 'utilisateur';
-
-                                if ($role === 'employe'): ?>
-                                    <span class="badge bg-info-subtle text-info-emphasis border border-info px-2 py-1 rounded-pill">
-                                        <i class="bi bi-shield-lock-fill me-1"></i> Employé
-                                    </span>
-                                <?php elseif ($role === 'administrateur'): ?>
-                                    <span class="badge bg-danger-subtle text-danger border border-danger px-2 py-1 rounded-pill">
-                                        <i class="bi bi-shield-fill-check me-1"></i> Administrateur
-                                    </span>
-                                <?php elseif (!empty($user['est_chauffeur'])): ?>
-                                    <span class="badge bg-success-subtle text-success border border-success px-2 py-1 rounded-pill">
-                                        <i class="bi bi-car-front-fill me-1"></i> Passager & Chauffeur
-                                    </span>
-                                <?php else: ?>
-                                    <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 rounded-pill">
-                                        <i class="bi bi-person-walking me-1"></i> Passager uniquement
-                                    </span>
-                                <?php endif; ?>
+                            <?php if ($role === 'employe'): ?>
+                                <span class="badge bg-info text-dark px-2 py-1 rounded-pill">
+                                    <i class="bi bi-shield-lock-fill me-1"></i> Employé
+                                </span>
+                            <?php elseif (in_array($role, ['administrateur', 'admin'])): ?>
+                                <span class="badge bg-dark text-white px-2 py-1 rounded-pill">
+                                    <i class="bi bi-shield-fill-check me-1"></i> Administrateur
+                                </span>
+                            <?php elseif (!empty($user['est_chauffeur'])): ?>
+                                <span class="badge bg-success text-white px-2 py-1 rounded-pill">
+                                    <i class="bi bi-car-front-fill me-1"></i> Passager & Chauffeur
+                                </span>
+                            <?php else: ?>
+                                <span class="badge bg-secondary text-white px-2 py-1 rounded-pill">
+                                    <i class="bi bi-person-walking me-1"></i> Passager uniquement
+                                </span>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -197,7 +206,7 @@ $mes_reservations = $stmtReservations->fetchAll();
                 </a>
             </div>
             
-            <?php if (!empty($user['preferences_libres'])): ?>
+            <?php if (!$estAdminOuEmploye && !empty($user['preferences_libres'])): ?>
                 <div class="bg-light p-3 rounded-3 border-start border-success border-4 mt-2">
                     <div class="fw-semibold text-dark small mb-1"><i class="bi bi-chat-quote me-1 text-sapin"></i> Mes préférences de voyage :</div>
                     <div class="text-muted small fst-italic">"<?= htmlspecialchars_decode($user['preferences_libres']) ?>"</div>
@@ -205,104 +214,176 @@ $mes_reservations = $stmtReservations->fetchAll();
             <?php endif; ?>
         </div>
 
-        <!-- Section Véhicules -->
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2 class="h4 fw-bold text-dark m-0"><i class="bi bi-car-front text-sapin me-2"></i>Mes Véhicules</h2>
-            <?php if (!empty($vehicules)): ?>
-                <a href="liste_vehicules.php" class="text-sapin text-decoration-none fw-semibold small">
-                    Voir la liste complète <i class="bi bi-arrow-right"></i>
-                </a>
-            <?php endif; ?>
-        </div>
-
-        <div class="card space-card p-4 bg-white mb-4">
-            <?php if (empty($vehicules)): ?>
-                <div class="text-center py-3">
-                    <p class="text-muted mb-3">Vous n'avez pas encore enregistré de véhicule. Ajoutez-en un pour pouvoir proposer vos propres trajets et devenir chauffeur !</p>
-                    <a href="ajouter_vehicule.php" class="btn btn-sapin fw-bold rounded-pill px-4">
-                        <i class="bi bi-plus-lg me-1"></i> Ajouter mon premier véhicule
-                    </a>
+        <?php if ($estAdminOuEmploye): ?>
+            <!-- Message de redirection pour Admin & Employé -->
+            <div class="card space-card p-4 bg-white text-center mb-4">
+                <i class="bi bi-info-circle-fill fs-1 text-sapin mb-2"></i>
+                <h2 class="h5 fw-bold text-dark">Espace d'administration / Modération</h2>
+                <p class="text-muted small">
+                    Les fonctionnalités de gestion des véhicules et de participation aux covoiturages sont réservées aux usagers de la plateforme.
+                </p>
+                <div class="mt-2">
+                    <?php if ($role === 'employe'): ?>
+                        <a href="espace_employe.php" class="btn btn-sapin rounded-pill px-4 fw-bold">
+                            <i class="bi bi-shield-lock me-1"></i> Accéder à l'Espace Employé
+                        </a>
+                    <?php else: ?>
+                        <a href="espace_admin.php" class="btn btn-sapin rounded-pill px-4 fw-bold">
+                            <i class="bi bi-speedometer2 me-1"></i> Accéder au Dashboard Admin
+                        </a>
+                    <?php endif; ?>
                 </div>
-            <?php else: ?>
-                <div class="row g-3 mb-3">
-                    <?php foreach ($vehicules as $vehicule): ?>
-                        <div class="col-md-6">
-                            <div class="p-3 bg-light rounded-3 border h-100">
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <strong class="text-sapin"><?= htmlspecialchars($vehicule['marque']) ?> <?= htmlspecialchars($vehicule['modele']) ?></strong>
-                                    <span class="badge bg-white text-dark border px-2 py-1 rounded-pill small"><?= htmlspecialchars($vehicule['energie'] ?? 'Électrique') ?></span>
-                                </div>
-                                <div class="text-muted small">
-                                    <i class="bi bi-card-text me-1"></i> <?= htmlspecialchars($vehicule['immatriculation']) ?> &bull; 
-                                    <i class="bi bi-palette me-1"></i> <?= htmlspecialchars($vehicule['couleur']) ?>
+            </div>
+        <?php else: ?>
+
+            <!-- Section Véhicules -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="h4 fw-bold text-dark m-0"><i class="bi bi-car-front text-sapin me-2"></i>Mes Véhicules</h2>
+                <?php if (!empty($vehicules)): ?>
+                    <a href="liste_vehicules.php" class="text-sapin text-decoration-none fw-semibold small">
+                        Voir la liste complète <i class="bi bi-arrow-right"></i>
+                    </a>
+                <?php endif; ?>
+            </div>
+
+            <div class="card space-card p-4 bg-white mb-4">
+                <?php if (empty($vehicules)): ?>
+                    <div class="text-center py-3">
+                        <p class="text-muted mb-3">Vous n'avez pas encore enregistré de véhicule. Ajoutez-en un pour pouvoir proposer vos propres trajets et devenir chauffeur !</p>
+                        <a href="ajouter_vehicule.php" class="btn btn-sapin fw-bold rounded-pill px-4">
+                            <i class="bi bi-plus-lg me-1"></i> Ajouter mon premier véhicule
+                        </a>
+                    </div>
+                <?php else: ?>
+                    <div class="row g-3 mb-3">
+                        <?php foreach ($vehicules as $vehicule): ?>
+                            <div class="col-md-6">
+                                <div class="p-3 bg-light rounded-3 border h-100">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <strong class="text-sapin"><?= htmlspecialchars($vehicule['marque']) ?> <?= htmlspecialchars($vehicule['modele']) ?></strong>
+                                        <span class="badge bg-white text-dark border px-2 py-1 rounded-pill small"><?= htmlspecialchars($vehicule['energie'] ?? 'Électrique') ?></span>
+                                    </div>
+                                    <div class="text-muted small">
+                                        <i class="bi bi-card-text me-1"></i> <?= htmlspecialchars($vehicule['immatriculation']) ?> &bull; 
+                                        <i class="bi bi-palette me-1"></i> <?= htmlspecialchars($vehicule['couleur']) ?>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-                <div class="d-flex flex-wrap gap-2 pt-2 border-top">
-                    <a href="ajouter_vehicule.php" class="btn btn-outline-secondary btn-sm fw-bold rounded-pill px-3">
-                        <i class="bi bi-plus-lg me-1"></i> Ajouter un véhicule
-                    </a>
-                    <a href="proposer_trajet.php" class="btn btn-sapin btn-sm fw-bold rounded-pill px-3">
-                        <i class="bi bi-rocket-takeoff me-1"></i> Proposer un trajet
-                    </a>
-                </div>
-            <?php endif; ?>
-        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 pt-2 border-top">
+                        <a href="ajouter_vehicule.php" class="btn btn-outline-secondary btn-sm fw-bold rounded-pill px-3">
+                            <i class="bi bi-plus-lg me-1"></i> Ajouter un véhicule
+                        </a>
+                        <a href="proposer_trajet.php" class="btn btn-sapin btn-sm fw-bold rounded-pill px-3">
+                            <i class="bi bi-rocket-takeoff me-1"></i> Proposer un trajet
+                        </a>
+                    </div>
+                <?php endif; ?>
+            </div>
 
-        <!-- Section Trajets Proposés (Chauffeur) -->
-        <?php 
-        $role = $_SESSION['role'] ?? $user['role'] ?? 'utilisateur';
-        if (!empty($user['est_chauffeur']) || in_array($role, ['employe', 'administrateur'])): 
-        ?>
-            <h2 class="h4 fw-bold text-dark mt-4 mb-3"><i class="bi bi-calendar-event text-sapin me-2"></i>Mes Trajets proposés (Chauffeur)</h2>
-            <?php if (empty($mes_trajets_proposes)): ?>
+            <!-- Section Trajets Proposés (Chauffeur) -->
+            <?php if (!empty($user['est_chauffeur'])): ?>
+                <h2 class="h4 fw-bold text-dark mt-4 mb-3"><i class="bi bi-calendar-event text-sapin me-2"></i>Mes Trajets proposés (Chauffeur)</h2>
+                <?php if (empty($mes_trajets_proposes)): ?>
+                    <div class="card space-card p-4 bg-white text-muted mb-4 fst-italic">
+                        Vous n'avez créé ou proposé aucun trajet pour le moment.
+                    </div>
+                <?php else: ?>
+                    <div class="mb-4">
+                        <?php foreach ($mes_trajets_proposes as $trajet) : 
+                            $badgeClass = 'badge-ouvert'; $statutTexte = 'À venir';
+                            if ($trajet['statut'] === 'en cours') { $badgeClass = 'badge-en-cours'; $statutTexte = 'En cours'; }
+                            elseif ($trajet['statut'] === 'termine') { $badgeClass = 'badge-termine'; $statutTexte = 'Terminé'; }
+                            elseif ($trajet['statut'] === 'annule') { $badgeClass = 'badge-annule'; $statutTexte = 'Annulé'; }
+                        ?>
+                            <div class="card space-card p-3 p-md-4 bg-white mb-3 border-start border-success border-5">
+                                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+                                    <div>
+                                        <span class="fs-5 fw-bold text-dark">
+                                            <?= htmlspecialchars($trajet['ville_depart']) ?> <i class="bi bi-arrow-right text-muted mx-1"></i> <?= htmlspecialchars($trajet['ville_arrivee']) ?>
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span class="text-sapin fw-bold fs-5"><?= htmlspecialchars($trajet['prix']) ?> crédits <span class="fs-6 text-muted fw-normal">/ place</span></span>
+                                    </div>
+                                </div>
+
+                                <div class="text-muted my-2 small d-flex flex-wrap align-items-center gap-2">
+                                    <span><i class="bi bi-clock me-1"></i> Départ : <strong><?= dateEnFrancais($trajet['date_depart']) ?></strong></span>
+                                    <span>&bull;</span>
+                                    <span><i class="bi bi-people me-1"></i> Places : <strong><?= $trajet['places_disponibles'] ?></strong></span>
+                                    <span>&bull;</span>
+                                    <span>Statut : <span class="statut-badge <?= $badgeClass ?>"><?= $statutTexte ?></span></span>
+                                    <?php if (isset($trajet['energie']) && in_array(strtolower($trajet['energie']), ['électrique', 'electrique', 'hybride'])) : ?>
+                                        <span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-leaf-fill me-1"></i> Éco</span>
+                                    <?php endif; ?>
+                                </div>
+
+                                <div class="d-flex gap-2 mt-2 pt-2 border-top">
+                                    <?php if ($trajet['statut'] === 'ouvert'): ?>
+                                        <a href="scripts/demarrer_trajet.php?id=<?= $trajet['id'] ?>" class="btn btn-sm btn-primary fw-bold rounded-pill px-3">
+                                            <i class="bi bi-play-fill me-1"></i> Démarrer
+                                        </a>
+                                        <a href="scripts/annuler_trajet_chauffeur.php?id=<?= $trajet['id'] ?>" class="btn btn-sm btn-outline-danger fw-bold rounded-pill px-3" onclick="return confirm('Voulez-vous vraiment annuler ce trajet ?')">
+                                            <i class="bi bi-x-circle me-1"></i> Annuler
+                                        </a>
+                                    <?php elseif ($trajet['statut'] === 'en cours'): ?> 
+                                        <a href="scripts/terminer_trajet.php?id=<?= $trajet['id'] ?>" class="btn btn-sm btn-success fw-bold rounded-pill px-3">
+                                            <i class="bi bi-flag-fill me-1"></i> Arrivée à destination
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+
+            <!-- Section Réservations (Passager) -->
+            <h2 class="h4 fw-bold text-dark mt-4 mb-3"><i class="bi bi-ticket-perforated text-sapin me-2"></i>Mes Réservations (Passager)</h2>
+            <?php if (empty($mes_reservations)): ?>
                 <div class="card space-card p-4 bg-white text-muted mb-4 fst-italic">
-                    Vous n'avez créé ou proposé aucun trajet pour le moment.
+                    Vous n'avez pas encore effectué de réservation en tant que passager.
                 </div>
             <?php else: ?>
                 <div class="mb-4">
-                    <?php foreach ($mes_trajets_proposes as $trajet) : 
-                        $badgeClass = 'badge-ouvert'; $statutTexte = 'À venir';
-                        if ($trajet['statut'] === 'en cours') { $badgeClass = 'badge-en-cours'; $statutTexte = 'En cours'; }
-                        elseif ($trajet['statut'] === 'termine') { $badgeClass = 'badge-termine'; $statutTexte = 'Terminé'; }
-                        elseif ($trajet['statut'] === 'annule') { $badgeClass = 'badge-annule'; $statutTexte = 'Annulé'; }
+                    <?php foreach ($mes_reservations as $res) : 
+                        $badgeClassPassager = 'badge-ouvert'; $statut_texte = 'À venir';
+                        if ($res['statut_trajet'] === 'en cours') { $badgeClassPassager = 'badge-en-cours'; $statut_texte = 'En cours'; }
+                        elseif ($res['statut_trajet'] === 'termine') { $badgeClassPassager = 'badge-termine'; $statut_texte = 'Terminé'; }
+                        elseif ($res['statut_trajet'] === 'annule') { $badgeClassPassager = 'badge-annule'; $statut_texte = 'Annulé'; }
                     ?>
-                        <div class="card space-card p-3 p-md-4 bg-white mb-3 border-start border-success border-5">
+                        <div class="card space-card p-3 p-md-4 bg-white mb-3 border-start border-primary border-5">
                             <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
                                 <div>
                                     <span class="fs-5 fw-bold text-dark">
-                                        <?= htmlspecialchars($trajet['ville_depart']) ?> <i class="bi bi-arrow-right text-muted mx-1"></i> <?= htmlspecialchars($trajet['ville_arrivee']) ?>
+                                        <?= htmlspecialchars($res['ville_depart']) ?> <i class="bi bi-arrow-right text-muted mx-1"></i> <?= htmlspecialchars($res['ville_arrivee']) ?>
                                     </span>
                                 </div>
                                 <div>
-                                    <span class="text-sapin fw-bold fs-5"><?= htmlspecialchars($trajet['prix']) ?> crédits <span class="fs-6 text-muted fw-normal">/ place</span></span>
+                                    <span class="text-primary fw-bold fs-5"><?= $res['prix'] + 2 ?> crédits</span>
                                 </div>
                             </div>
 
                             <div class="text-muted my-2 small d-flex flex-wrap align-items-center gap-2">
-                                <span><i class="bi bi-clock me-1"></i> Départ : <strong><?= dateEnFrancais($trajet['date_depart']) ?></strong></span>
+                                <span><i class="bi bi-clock me-1"></i> Départ : <strong><?= dateEnFrancais($res['date_depart']) ?></strong></span>
                                 <span>&bull;</span>
-                                <span><i class="bi bi-people me-1"></i> Places : <strong><?= $trajet['places_disponibles'] ?></strong></span>
-                                <span>&bull;</span>
-                                <span>Statut : <span class="statut-badge <?= $badgeClass ?>"><?= $statutTexte ?></span></span>
-                                <?php if (isset($trajet['energie']) && in_array(strtolower($trajet['energie']), ['électrique', 'electrique', 'hybride'])) : ?>
-                                    <span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-leaf-fill me-1"></i> Éco</span>
-                                <?php endif; ?>
+                                <span>Statut : <span class="statut-badge <?= $badgeClassPassager ?>"><?= $statut_texte ?></span></span>
                             </div>
 
-                            <div class="d-flex gap-2 mt-2 pt-2 border-top">
-                                <?php if ($trajet['statut'] === 'ouvert'): ?>
-                                    <a href="scripts/demarrer_trajet.php?id=<?= $trajet['id'] ?>" class="btn btn-sm btn-primary fw-bold rounded-pill px-3">
-                                        <i class="bi bi-play-fill me-1"></i> Démarrer
+                            <div class="d-flex flex-wrap align-items-center gap-2 mt-2 pt-2 border-top">
+                                <?php if ($res['statut_trajet'] === 'termine' && is_null($res['avis_id'])) : ?>
+                                    <a href="laisser_avis.php?id_trajet=<?= $res['id_trajet'] ?>" class="btn btn-sm btn-warning fw-bold rounded-pill px-3 text-dark">
+                                        <i class="bi bi-star-fill me-1"></i> Laisser un avis
                                     </a>
-                                    <a href="scripts/annuler_trajet_chauffeur.php?id=<?= $trajet['id'] ?>" class="btn btn-sm btn-outline-danger fw-bold rounded-pill px-3" onclick="return confirm('Voulez-vous vraiment annuler ce trajet ?')">
-                                        <i class="bi bi-x-circle me-1"></i> Annuler
-                                    </a>
-                                <?php elseif ($trajet['statut'] === 'en cours'): ?> 
-                                    <a href="scripts/terminer_trajet.php?id=<?= $trajet['id'] ?>" class="btn btn-sm btn-success fw-bold rounded-pill px-3">
-                                        <i class="bi bi-flag-fill me-1"></i> Arrivée à destination
+                                <?php elseif (!is_null($res['avis_id'])): ?>
+                                    <span class="text-success fw-bold small"><i class="bi bi-check-circle-fill me-1"></i> Avis envoyé ! Merci pour votre retour.</span>
+                                <?php endif; ?>
+
+                                <?php if ($res['statut_trajet'] === 'ouvert') : ?>
+                                    <a href="scripts/annuler_reservation.php?id_trajet=<?= $res['id_trajet'] ?>" class="btn btn-sm btn-outline-danger fw-bold rounded-pill px-3" onclick="return confirm('Êtes-vous sûr de vouloir annuler ?')">
+                                        <i class="bi bi-x-lg me-1"></i> Annuler ma réservation
                                     </a>
                                 <?php endif; ?>
                             </div>
@@ -310,65 +391,14 @@ $mes_reservations = $stmtReservations->fetchAll();
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
-        <?php endif; ?>
 
-        <!-- Section Réservations (Passager) -->
-        <h2 class="h4 fw-bold text-dark mt-4 mb-3"><i class="bi bi-ticket-perforated text-sapin me-2"></i>Mes Réservations (Passager)</h2>
-        <?php if (empty($mes_reservations)): ?>
-            <div class="card space-card p-4 bg-white text-muted mb-4 fst-italic">
-                Vous n'avez pas encore effectué de réservation en tant que passager.
+            <div class="text-center mt-4">
+                <a href="recherche.php" class="text-sapin fw-semibold text-decoration-none">
+                    <i class="bi bi-search me-1"></i> Rechercher d'autres trajets
+                </a>
             </div>
-        <?php else: ?>
-            <div class="mb-4">
-                <?php foreach ($mes_reservations as $res) : 
-                    $badgeClassPassager = 'badge-ouvert'; $statut_texte = 'À venir';
-                    if ($res['statut_trajet'] === 'en cours') { $badgeClassPassager = 'badge-en-cours'; $statut_texte = 'En cours'; }
-                    elseif ($res['statut_trajet'] === 'termine') { $badgeClassPassager = 'badge-termine'; $statut_texte = 'Terminé'; }
-                    elseif ($res['statut_trajet'] === 'annule') { $badgeClassPassager = 'badge-annule'; $statut_texte = 'Annulé'; }
-                ?>
-                    <div class="card space-card p-3 p-md-4 bg-white mb-3 border-start border-primary border-5">
-                        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-                            <div>
-                                <span class="fs-5 fw-bold text-dark">
-                                    <?= htmlspecialchars($res['ville_depart']) ?> <i class="bi bi-arrow-right text-muted mx-1"></i> <?= htmlspecialchars($res['ville_arrivee']) ?>
-                                </span>
-                            </div>
-                            <div>
-                                <span class="text-primary fw-bold fs-5"><?= $res['prix'] + 2 ?> crédits</span>
-                            </div>
-                        </div>
 
-                        <div class="text-muted my-2 small d-flex flex-wrap align-items-center gap-2">
-                            <span><i class="bi bi-clock me-1"></i> Départ : <strong><?= dateEnFrancais($res['date_depart']) ?></strong></span>
-                            <span>&bull;</span>
-                            <span>Statut : <span class="statut-badge <?= $badgeClassPassager ?>"><?= $statut_texte ?></span></span>
-                        </div>
-
-                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2 pt-2 border-top">
-                            <?php if ($res['statut_trajet'] === 'termine' && is_null($res['avis_id'])) : ?>
-                                <a href="laisser_avis.php?id_trajet=<?= $res['id_trajet'] ?>" class="btn btn-sm btn-warning fw-bold rounded-pill px-3 text-dark">
-                                    <i class="bi bi-star-fill me-1"></i> Laisser un avis
-                                </a>
-                            <?php elseif (!is_null($res['avis_id'])): ?>
-                                <span class="text-success fw-bold small"><i class="bi bi-check-circle-fill me-1"></i> Avis envoyé ! Merci pour votre retour.</span>
-                            <?php endif; ?>
-
-                            <?php if ($res['statut_trajet'] === 'ouvert') : ?>
-                                <a href="scripts/annuler_reservation.php?id_trajet=<?= $res['id_trajet'] ?>" class="btn btn-sm btn-outline-danger fw-bold rounded-pill px-3" onclick="return confirm('Êtes-vous sûr de vouloir annuler ?')">
-                                    <i class="bi bi-x-lg me-1"></i> Annuler ma réservation
-                                </a>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
         <?php endif; ?>
-
-        <div class="text-center mt-4">
-            <a href="recherche.php" class="text-sapin fw-semibold text-decoration-none">
-                <i class="bi bi-search me-1"></i> Rechercher d'autres trajets
-            </a>
-        </div>
 
     </main>
 

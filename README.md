@@ -44,7 +44,7 @@ projet_ecoride/
 ├── scripts/            # Traitements PHP (connexion, réservation, etc.)
 ├── index.php           # Page d'accueil / Point d'entrée
 └── README.md           # Documentation du dépôt
-
+```
 ## Installation en Local
 
 ### Prérequis

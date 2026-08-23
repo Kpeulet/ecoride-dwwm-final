@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $animal_txt = (isset($_POST['animal']) && $_POST['animal'] == '1') ? "Animaux acceptés" : "Pas d'animaux";
         
         // On récupère uniquement la remarque saisie par l'utilisateur
-        $remarques = isset($_POST['preferences_libres']) ? trim($_POST['preferences_libres']) : '';
+        $remarques = isset($_POST['preferences_libres']) ? trim(htmlspecialchars_decode($_POST['preferences_libres'], ENT_QUOTES)) : '';
 
         // Si la chaîne contenait déjà des puces issues d'un ancien enregistrement, on nettoie pour ne garder que le texte libre
         if (preg_match('/• Autres\s*:\s*(.*)/s', $remarques, $matches)) {

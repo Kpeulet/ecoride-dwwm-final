@@ -2,17 +2,9 @@
 session_start();
 require_once '../config/db.php';
 
-// Sécurité : On vérifie si l'extension MongoDB est active sur MAMP
-$mongoDisponible = false;
-try {
-    if (file_exists('../config/mongodb.php')) {
-        include_once '../config/mongodb.php';
-        if (class_exists('MongoDB\Client')) {
-            $mongoDisponible = true;
-        }
-    }
-} catch (\Throwable $e) {
-    error_log("Extension MongoDB absente en local : " . $e->getMessage());
+// Chargement de la configuration et de la connexion MongoDB
+if (file_exists('../config/mongodb.php')) {
+    include_once '../config/mongodb.php';
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
@@ -28,38 +20,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
     $statut_avis = 'en_attente';
 
     try {
-        // Début de la transaction
+        // Début de la transaction SQL
         $pdo->beginTransaction();
 
-        // 1. Sauvegarde dans MySQL (Table avis)
+        // 1. Sauvegarde principale dans MySQL (Table avis)
         $stmt = $pdo->prepare("INSERT INTO avis (id_trajet, id_expediteur, note, commentaire, statut) VALUES (?, ?, ?, ?, ?)");
         $stmt->execute([$id_trajet, $id_expediteur, $note, $commentaire, $statut_avis]);
 
-        // 2. LOGIQUE DES CRÉDITS (US 11) : Récupération du prix réel et de l'ID du chauffeur
+        // 2. Logique des crédits & infos du trajet
         $stmtChauffeur = $pdo->prepare("SELECT id_chauffeur, prix, date_depart, date_arrivee, ville_depart, ville_arrivee FROM trajets WHERE id = ?");
         $stmtChauffeur->execute([$id_trajet]);
         $trajetInfos = $stmtChauffeur->fetch();
 
         if ($trajetInfos) {
             $id_chauffeur = $trajetInfos['id_chauffeur'];
-            $prix_trajet = intval($trajetInfos['prix']); // Prix dynamique de la place du trajet
+            $prix_trajet = intval($trajetInfos['prix']);
 
-            // Si tout s'est bien passé, on crédite la valeur réelle de la place réservée
             if ($voyage_statut === 'bien_passe') {
                 $stmtCredit = $pdo->prepare("UPDATE utilisateur SET credits = credits + ? WHERE id = ?");
                 $stmtCredit->execute([$prix_trajet, $id_chauffeur]);
                 $messageSuccess = "avis_envoye";
             } else {
-                // Règle US 11 : En cas de problème, pas de crédit automatique. 
-                // Correction ici : id_utilisateur au lieu de id_passager
                 $updateRes = $pdo->prepare("UPDATE reservations SET statut = 'litige' WHERE id_trajet = ? AND id_utilisateur = ?");
                 $updateRes->execute([$id_trajet, $id_expediteur]);
                 $messageSuccess = "signalement_enregistre";
             }
         }
 
-        // 3. EXIGENCE JURY : Sauvegarde du document NoSQL si "mal passé" et MongoDB disponible
-        if ($voyage_statut === 'mal_passe' && $mongoDisponible && isset($litigesCollection) && $trajetInfos) {
+        // 3. ENREGISTREMENT NOSQL MONGODB (Avis & Incidents)
+        
+        // A. Sauvegarde dans la collection 'avis' MongoDB si la connexion est active
+        if (isset($avisCollection) && $avisCollection !== null) {
+            try {
+                $avisCollection->insertOne([
+                    "id_trajet" => $id_trajet,
+                    "id_expediteur" => $id_expediteur,
+                    "note" => $note,
+                    "commentaire" => $commentaire,
+                    "statut" => $statut_avis,
+                    "voyage_statut" => $voyage_statut,
+                    "created_at" => new MongoDB\BSON\UTCDateTime()
+                ]);
+            } catch (\Exception $eMongo) {
+                error_log("Erreur insertion avis MongoDB : " . $eMongo->getMessage());
+            }
+        }
+
+        // B. Sauvegarde dans la collection 'incidents' MongoDB si "mal passé"
+        if ($voyage_statut === 'mal_passe' && isset($litigesCollection) && $litigesCollection !== null && $trajetInfos) {
             
             $stmtInfos = $pdo->prepare("
                 SELECT p.pseudo AS passager_pseudo, p.email AS passager_email,
@@ -72,31 +80,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
             $infos = $stmtInfos->fetch();
 
             if ($infos) {
-                $documentLitige = [
-                    "numero_covoiturage" => $id_trajet,
-                    "date_incident" => new MongoDB\BSON\UTCDateTime(),
-                    "passager" => [
-                        "pseudo" => $infos['passager_pseudo'],
-                        "email" => $infos['passager_email']
-                    ],
-                    "chauffeur" => [
-                        "pseudo" => $infos['chauffeur_pseudo'],
-                        "email" => $infos['chauffeur_email']
-                    ],
-                    "descriptif_trajet" => [
-                        "date_depart" => $trajetInfos['date_depart'],
-                        "date_arrivee" => $trajetInfos['date_arrivee'],
-                        "lieu_depart" => $trajetInfos['ville_depart'],
-                        "lieu_arrivee" => $trajetInfos['ville_arrivee']
-                    ],
-                    "commentaire_plainte" => $commentaire,
-                    "statut_resolution" => "En attente (À contacter par un employé)"
-                ];
+                try {
+                    $documentLitige = [
+                        "numero_covoiturage" => $id_trajet,
+                        "date_incident" => new MongoDB\BSON\UTCDateTime(),
+                        "passager" => [
+                            "pseudo" => $infos['passager_pseudo'],
+                            "email" => $infos['passager_email']
+                        ],
+                        "chauffeur" => [
+                            "pseudo" => $infos['chauffeur_pseudo'],
+                            "email" => $infos['chauffeur_email']
+                        ],
+                        "descriptif_trajet" => [
+                            "date_depart" => $trajetInfos['date_depart'],
+                            "date_arrivee" => $trajetInfos['date_arrivee'],
+                            "lieu_depart" => $trajetInfos['ville_depart'],
+                            "lieu_arrivee" => $trajetInfos['ville_arrivee']
+                        ],
+                        "commentaire_plainte" => $commentaire,
+                        "statut_resolution" => "En attente (À contacter par un employé)"
+                    ];
 
-                $litigesCollection->insertOne($documentLitige);
+                    $litigesCollection->insertOne($documentLitige);
+                } catch (\Exception $eMongoLitige) {
+                    error_log("Erreur insertion incident MongoDB : " . $eMongoLitige->getMessage());
+                }
             }
         }
 
+        // Validation finale de la transaction PDO
         $pdo->commit();
 
         header('Location: ../mon_espace.php?success=' . $messageSuccess);

@@ -5,18 +5,27 @@ if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
     require_once __DIR__ . '/../vendor/autoload.php';
 }
 
+$mongoDb = null;
+$avisCollection = null;
 $litigesCollection = null;
 
 try {
     if (class_exists('\MongoDB\Client')) {
-        // Connexion au serveur MongoDB local
-        $mongoClient = new \MongoDB\Client("mongodb://127.0.0.1:27017");
+        // 1. Récupère l'URI Atlas (Render) ou bascule sur le serveur local
+        $mongoUri = getenv('MONGODB_URI') ?: "mongodb://127.0.0.1:27017";
         
-        // Connexion à la base et à la collection configurées dans Compass
-        $mongoDb = $mongoClient->selectDatabase('backend-template');
+        $mongoClient = new \MongoDB\Client($mongoUri);
+        
+        // 2. Sélection de la base principale 'ecoride'
+        $mongoDb = $mongoClient->selectDatabase('ecoride');
+        
+        // 3. Initialisation des deux collections NoSQL
+        $avisCollection = $mongoDb->selectCollection('avis');
         $litigesCollection = $mongoDb->selectCollection('incidents');
     }
 } catch (Exception $e) {
     error_log("Erreur de connexion MongoDB : " . $e->getMessage());
+    $mongoDb = null;
+    $avisCollection = null;
     $litigesCollection = null;
 }

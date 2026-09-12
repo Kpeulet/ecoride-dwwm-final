@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sinscrire'])) {
     }
 
     try {
-        // CORRECTION SÉCURITÉ : Vérifier si le pseudo ou l'email existe déjà
+        // Vérifier si le pseudo ou l'email existe déjà
         $stmtCheck = $pdo->prepare("SELECT id FROM utilisateur WHERE email = ? OR pseudo = ?");
         $stmtCheck->execute([$email, $pseudo]);
         
@@ -31,8 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sinscrire'])) {
         // Hachage sécurisé du mot de passe
         $password_hache = password_hash($password_brut, PASSWORD_BCRYPT);
 
-        // CORRECTION ÉNONCÉ : On offre bien 20 crédits de bienvenue
-        // Assure-toi que la colonne s'appelle bien 'password' dans ta BDD (et non 'mot_de_passe')
+        // Offre de Bienvenue 20 crédits
         $sql = "INSERT INTO utilisateur (pseudo, email, password, role, credits) VALUES (?, ?, ?, 'utilisateur', 20)";
         $stmt = $pdo->prepare($sql);
         $stmt->execute([$pseudo, $email, $password_hache]);
@@ -49,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['sinscrire'])) {
         exit;
         
     } catch (PDOException $e) {
-        // En production/examen, on évite d'afficher l'erreur SQL brute à l'utilisateur
+        // Pour éviter d'afficher l'erreur SQL brute à l'utilisateur
         error_log("Erreur inscription : " . $e->getMessage());
         header('Location: ../inscription.php?erreur=technique');
         exit;
